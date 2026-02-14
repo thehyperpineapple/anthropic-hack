@@ -3,11 +3,12 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
-import { Bell, Heart, Upload, LayoutDashboard, Settings } from "lucide-react"
+import { Bell, Heart, Upload, LayoutDashboard, Settings, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/upload", label: "Upload", icon: Upload },
+  { href: "/files", label: "Files", icon: FileText },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ]
 
