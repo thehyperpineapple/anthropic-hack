@@ -1,4 +1,4 @@
-# OrderFlow AI
+# OrderFlow
 
 An AI-powered order management platform for wholesale food distributors. Employees can submit orders via voice or text, and the system uses Anthropic Claude to extract structured order data, detect anomalies, and generate customer quotes — all through a modern web interface.
 
