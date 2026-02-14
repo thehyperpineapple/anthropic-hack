@@ -115,25 +115,58 @@ cd frontend
 
 # Install dependencies
 npm install
-
-# Create .env file with your keys
+npm run dev # for dev 
+npm run build # for build
 ```
 
-Create a `frontend/.env` file:
+Create a `frontend/.env` file with the following variables:
 
 ```env
+# Required — same Anthropic key used by the backend
 ANTHROPIC_API_KEY=sk-ant-...
-DATABASE_URL=postgresql+asyncpg://...
+
+# Required — same Neon/PostgreSQL connection string as the backend
+DATABASE_URL=postgresql+asyncpg://user:password@host:5432/dbname?ssl=require
+
+# Required — powers real-time voice transcription (ElevenLabs Scribe)
 ELEVENLABS_API_KEY=sk_...
+
+# Optional — Bland AI agent integration
+BL_WORKSPACE=your-workspace
+BL_API_KEY=bl_...
+BL_AGENT_NAME=your-agent
+
+# Optional — override the backend URL (defaults to http://localhost:8000)
+# NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Start the frontend:
+Start the dev server:
 
 ```bash
 npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
+
+#### Frontend Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server with Turbopack |
+| `npm run build` | Create production build |
+| `npm run start` | Run production server |
+| `npm run lint` | Run ESLint |
+
+#### Key Frontend Dependencies
+
+- **Next.js 16** — App Router with Turbopack
+- **React 19** — UI library
+- **Tailwind CSS 3** — Utility-first styling
+- **shadcn/ui** — Accessible component primitives (Radix UI under the hood)
+- **Framer Motion** — Page transitions and micro-animations
+- **Recharts** — Dashboard analytics charts
+- **@elevenlabs/react** — Real-time voice transcription via ElevenLabs Scribe
+- **next-themes** — Dark / light mode support
 
 ## API Endpoints
 
