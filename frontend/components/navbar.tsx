@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/upload", label: "Upload", icon: Upload },
-  { href: "/files", label: "Files", icon: FileText },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ]
 
@@ -25,17 +24,8 @@ export function Navbar() {
             <span className="text-xl font-bold tracking-tight text-foreground">
               {"Order"}
             </span>
-            <span className="relative mx-0.5">
-              <Heart
-                className="h-5 w-5 text-coral-400 fill-coral-400 group-hover:animate-heartbeat transition-transform"
-                aria-hidden="true"
-              />
-            </span>
             <span className="text-xl font-bold tracking-tight text-foreground">
               {"Flow"}
-            </span>
-            <span className="ml-1 text-xs font-semibold text-coral-400 uppercase tracking-widest">
-              AI
             </span>
           </div>
         </Link>
@@ -77,22 +67,6 @@ export function Navbar() {
             <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute left-2 top-2 h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </button>
-          <button
-            className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-coral-400" />
-          </button>
-          <button
-            className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-            aria-label="Settings"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-coral-400 to-rose-600 flex items-center justify-center text-xs font-bold text-card">
-            JD
-          </div>
         </div>
       </nav>
     </header>

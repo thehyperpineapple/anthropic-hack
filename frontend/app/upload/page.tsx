@@ -640,7 +640,7 @@ export default function UploadPage() {
         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
           Made with{" "}
           <Heart className="h-3 w-3 text-coral-400 fill-coral-400" /> in
-          SF
+          NYC
         </p>
       </footer>
     </div>

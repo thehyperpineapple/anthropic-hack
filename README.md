@@ -1,330 +1,220 @@
 # OrderFlow AI
 
-An AI-driven order entry system that processes customer interactions from voice, email, and PDF sources, extracting structured order data with built-in safety verification.
+An AI-powered order management platform for wholesale food distributors. Employees can submit orders via voice or text, and the system uses Anthropic Claude to extract structured order data, detect anomalies, and generate customer quotes — all through a modern web interface.
 
 ## Features
 
-- **Multi-source Interaction Processing**: Support for voice transcripts, email, and PDF documents
-- **AI-Powered Order Extraction**: Uses Anthropic Claude to extract structured order data from unstructured customer interactions
-- **Content Safety Verification**: Integrates White Circle API for content moderation with configurable safety modes
-- **Anomaly Detection**: Automatically flags suspicious orders for review
-- **Tenant-Scoped Data**: Multi-tenant architecture with isolation via X-Tenant-ID header
-- **Async-First Design**: Built on FastAPI with SQLAlchemy asyncio for high performance
+### Order Processing
+- **Voice Orders** — Record audio directly in the browser with real-time transcription powered by ElevenLabs Scribe
+- **Text Orders** — Type, paste, or upload order files (.txt, .pdf, .docx, .csv)
+- **AI Extraction** — Claude parses unstructured order messages into structured line items with SKUs, quantities, and prices
+- **Anomaly Detection** — Automatically flags unusually large orders or suspicious patterns for human review
+
+### Dashboard
+- **Order Management** — View, filter, and search all orders with status tracking (Processing, Review, Completed, Error)
+- **Approve / Reject** — One-click review workflow for flagged orders
+- **Analytics** — Revenue charts, order status breakdown, top products, and customer insights
+- **Client & Employee Views** — Toggle between employee-wide and per-client analytics
+
+### General
+- **Dark Mode** — Full dark/light theme support
+- **Responsive UI** — Modern interface built with Next.js, Tailwind CSS, and Framer Motion
+- **Real-time Data** — Frontend pulls live data from the FastAPI backend
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, React, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion |
+| Backend | FastAPI, Python 3.11, SQLAlchemy (async), Pydantic |
+| Database | PostgreSQL (Neon) via asyncpg |
+| AI | Anthropic Claude (order parsing & extraction) |
+| Transcription | ElevenLabs Scribe (real-time voice-to-text) |
+| Deployment | Local development with Uvicorn + Next.js dev server |
 
 ## Architecture
 
 ```
-interactions/upload (voice, email, pdf)
-    ↓
-transcribe_audio (ElevenLabs or OpenAI Whisper)
-    ↓
-verify_content_safety (White Circle API)
-    ↓
-extract_order_data (Anthropic Claude)
-    ↓
-detect_anomalies (internal logic)
-    ↓
-persist to PostgreSQL (Order + OrderItems)
+┌─────────────────────────────────────────┐
+│              Next.js Frontend            │
+│  ┌──────────┐ ┌───────────┐ ┌─────────┐ │
+│  │  Upload   │ │ Dashboard │ │  Navbar │ │
+│  │ (voice/   │ │ (orders,  │ │ (theme, │ │
+│  │  text)    │ │ analytics)│ │  nav)   │ │
+│  └─────┬─────┘ └─────┬─────┘ └─────────┘ │
+│        │              │                    │
+│        └──────┬───────┘                    │
+│               ▼                            │
+│     /api/scribe-token (ElevenLabs)        │
+└───────────────┬────────────────────────────┘
+                │ HTTP
+                ▼
+┌─────────────────────────────────────────┐
+│            FastAPI Backend               │
+│                                          │
+│  /customers  /orders  /analytics         │
+│  /inventory  /orders/process             │
+│               │                          │
+│       ┌───────┴────────┐                 │
+│       ▼                ▼                 │
+│  OrderProcessor   AnomalyService         │
+│  (Claude AI)      (flagging logic)       │
+│       │                                  │
+│       ▼                                  │
+│   PostgreSQL (Neon)                      │
+└──────────────────────────────────────────┘
 ```
 
-## Prerequisites
+## Getting Started
 
-- Python 3.9+
-- Conda package manager
-- PostgreSQL database (local or remote)
+### Prerequisites
 
-## Installation & Setup
+- Python 3.11+ with Conda
+- Node.js 18+
+- PostgreSQL database (or a Neon account)
 
-### 1. Create Conda Environment
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/pxndey/anthropic-hack.git
+cd anthropic-hack
+```
+
+### 2. Backend Setup
 
 ```bash
 cd backend
-conda create -n orderflow python=3.11
-conda activate orderflow
-```
 
-### 2. Install Dependencies
+# Create and activate conda environment
+conda create -n anthropic python=3.11
+conda activate anthropic
 
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
-
-Copy the example environment file and fill in your API keys:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with the following required values:
+Create a `backend/.env` file:
 
 ```env
-# REQUIRED
 ANTHROPIC_API_KEY=sk-ant-...
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/orderflow
-
-# REQUIRED (at least one for audio transcription)
-ELEVENLABS_API_KEY=...        # Primary audio transcription
-OPENAI_API_KEY=...             # Fallback audio transcription (Whisper)
-
-# OPTIONAL
-WHITE_CIRCLE_API_KEY=...       # Leave blank to skip safety checks
-SAFETY_MODE=log                # Options: strict | log | off
-LOG_LEVEL=INFO
+DATABASE_URL=postgresql+asyncpg://user:password@host:5432/dbname?ssl=require
 ```
 
-### 4. Database Setup
-
-Create the PostgreSQL database and tables:
+Start the backend:
 
 ```bash
-# Create the database (if not exists)
-psql -U postgres -c "CREATE DATABASE orderflow;"
-
-# Run migrations (if available) or use SQLAlchemy to create tables
-# The models will be created on first run
+uvicorn main:app --reload
 ```
 
-Ensure your `DATABASE_URL` in `.env` matches your PostgreSQL setup:
+The API will be available at `http://localhost:8000` with docs at `/docs`.
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Create .env file with your keys
+```
+
+Create a `frontend/.env` file:
 
 ```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/orderflow
+ANTHROPIC_API_KEY=sk-ant-...
+DATABASE_URL=postgresql+asyncpg://...
+ELEVENLABS_API_KEY=sk_...
 ```
 
-## Running the Application
-
-### Start the Server
+Start the frontend:
 
 ```bash
-# Activate environment if needed
-conda activate orderflow
-
-# Start the FastAPI server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+npm run dev
 ```
 
-The API will be available at: `http://localhost:8000`
-
-### Access API Documentation
-
-- **Interactive Docs (Swagger UI)**: http://localhost:8000/docs
-- **Alternative Docs (ReDoc)**: http://localhost:8000/redoc
+The app will be available at `http://localhost:3000`.
 
 ## API Endpoints
 
-### Health Check
+### Customers
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/customers` | List all customers |
 
-```bash
-GET /health
-```
+### Orders
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/orders` | List orders (filter by `customer_id`, `status_filter`) |
+| GET | `/orders/{order_id}` | Get order details |
+| POST | `/orders/process` | Process a new order from text/voice transcript |
+| PATCH | `/orders/{order_id}/status` | Update order status (approve/reject) |
 
-Response:
-```json
-{"status": "ok"}
-```
+### Analytics
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/analytics/summary` | Revenue, order counts, status breakdown |
+| GET | `/analytics/top-products` | Top products by quantity/revenue |
 
-### Process Interaction
+### Inventory
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/inventory` | List all inventory items |
 
-```bash
-POST /interactions/upload
-Headers:
-  - X-Tenant-ID: {tenant-uuid}
-  - Content-Type: multipart/form-data
-
-Form Parameters:
-  - file: (binary) audio/email/pdf file
-  - source_type: VOICE | EMAIL | PDF
-  - customer_id: {customer-uuid}
-
-Response:
-{
-  "interaction_id": "uuid",
-  "order_id": "uuid",
-  "status": "DRAFT | FLAGGED | CONFIRMED",
-  "anomalies_detected": 0
-}
-```
-
-### List Orders
-
-```bash
-GET /orders
-Headers:
-  - X-Tenant-ID: {tenant-uuid}
-
-Query Parameters (optional):
-  - customer_id: {customer-uuid}
-  - order_status: DRAFT | FLAGGED | CONFIRMED | SYNCED
-  - limit: 50 (default)
-  - offset: 0 (default)
-```
-
-### Get Order Details
-
-```bash
-GET /orders/{order_id}
-Headers:
-  - X-Tenant-ID: {tenant-uuid}
-
-Response: Order with items, anomalies, and quotes
-```
-
-### Confirm Order
-
-```bash
-POST /orders/{order_id}/confirm
-Headers:
-  - X-Tenant-ID: {tenant-uuid}
-
-Response: Updated order with CONFIRMED status
-```
-
-## Configuration
-
-### Safety Modes
-
-- **`strict`**: Block any content flagged as unsafe (raises error)
-- **`log`** (default): Flag unsafe content but continue processing
-- **`off`**: Skip safety checks entirely
-
-### Logging
-
-Set `LOG_LEVEL` to control verbosity:
-- `DEBUG`: Detailed diagnostic information
-- `INFO`: General operational information
-- `WARNING`: Warning messages and errors
-- `CRITICAL`: Critical failures
-
-## Dependencies
-
-- **fastapi** (0.115+): Web framework
-- **uvicorn** (0.32+): ASGI server
-- **sqlalchemy** (2.0+): ORM with async support
-- **asyncpg** (0.30+): PostgreSQL async driver
-- **pydantic** (2.0+): Data validation
-- **anthropic** (0.39+): Anthropic Claude API client
-- **openai** (1.0+): OpenAI API client (for Whisper fallback)
-- **requests**: HTTP client for White Circle API
-- **httpx**: Async HTTP client
-- **python-dotenv**: Environment variable management
-
-## Error Handling
-
-The application includes comprehensive error handling:
-
-- **Transcription Errors**: Falls back from ElevenLabs to OpenAI Whisper
-- **Safety Violations**: Configurable via `SAFETY_MODE`
-- **Validation Errors**: Pydantic-based request validation
-- **Database Errors**: Proper rollback on transaction failures
-- **Missing Configuration**: Critical startup validation with clear error messages
-
-## Troubleshooting
-
-### "ANTHROPIC_API_KEY is not set"
-- Ensure you have a valid .env file with `ANTHROPIC_API_KEY` set
-- Verify the key format and that it's not expired
-
-### "DATABASE_URL is not set or still the default placeholder"
-- Update `DATABASE_URL` in `.env` with your actual PostgreSQL connection string
-- Verify PostgreSQL is running and accessible
-
-### "All transcription providers failed"
-- Ensure at least one of `ELEVENLABS_API_KEY` or `OPENAI_API_KEY` is configured
-- Verify the audio file format is supported
-
-### "Order not found"
-- Verify the order_id exists and belongs to your tenant
-- Check that the X-Tenant-ID header matches
-
-## Development
-
-### Install Development Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### View Logs
-
-```bash
-# Logs are output to console with ISO timestamp formatting
-# Adjust LOG_LEVEL in .env to control verbosity
-```
-
-### Database Inspection
-
-```bash
-# Connect to PostgreSQL and inspect tables
-psql -U user -d orderflow
-\dt                    # List tables
-\d orders              # Describe orders table
-SELECT * FROM orders;  # Query orders
-```
+### Health
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
 
 ## Project Structure
 
 ```
-backend/
-├── main.py                      # FastAPI app entry point
-├── config.py                    # Configuration & validation
-├── database.py                  # SQLAlchemy setup
-├── dependencies.py              # FastAPI dependency injection
-├── models.py                    # SQLAlchemy ORM models
-├── schemas.py                   # Pydantic request/response schemas
-├── requirements.txt             # Python dependencies
-├── .env.example                 # Environment variable template
-├── routers/
-│   ├── interactions.py          # Interaction upload endpoint
-│   └── orders.py                # Order CRUD endpoints
-└── services/
-    ├── ai_service.py            # AI/ML service integrations
-    ├── order_orchestrator.py     # Main processing pipeline
-    └── anomaly_service.py        # Anomaly detection logic
+anthropic-hack/
+├── backend/
+│   ├── main.py                    # FastAPI app & router registration
+│   ├── config.py                  # Settings & environment validation
+│   ├── database.py                # SQLAlchemy async engine setup
+│   ├── dependencies.py            # FastAPI dependency injection
+│   ├── models.py                  # ORM models (Customer, Order, Inventory)
+│   ├── schemas.py                 # Pydantic request/response schemas
+│   ├── seed.py                    # Database seeding script
+│   ├── requirements.txt           # Python dependencies
+│   ├── routers/
+│   │   ├── customers.py           # Customer endpoints
+│   │   ├── orders.py              # Order CRUD + AI processing
+│   │   ├── analytics.py           # Analytics & reporting
+│   │   └── inventory.py           # Inventory management
+│   └── services/
+│       ├── ai_service.py          # Anthropic Claude integration
+│       ├── order_processor.py     # Order parsing pipeline
+│       ├── order_orchestrator.py  # End-to-end processing flow
+│       └── anomaly_service.py     # Anomaly detection logic
+│
+└── frontend/
+    ├── app/
+    │   ├── layout.tsx             # Root layout with theme provider
+    │   ├── page.tsx               # Root redirect → /upload
+    │   ├── globals.css            # Global styles + dark mode variables
+    │   ├── upload/page.tsx        # Voice & text order submission
+    │   ├── dashboard/page.tsx     # Order management & analytics
+    │   └── api/
+    │       └── scribe-token/      # ElevenLabs token proxy
+    ├── components/
+    │   ├── navbar.tsx             # Top navigation bar
+    │   ├── order-detail-panel.tsx # Slide-over order details + approve/reject
+    │   ├── orders-table.tsx       # Sortable orders table
+    │   ├── stats-cards.tsx        # Dashboard stat cards
+    │   ├── client-analytics.tsx   # Per-client charts
+    │   ├── employee-analytics.tsx # Employee-wide charts
+    │   ├── status-badge.tsx       # Order status badges
+    │   ├── theme-provider.tsx     # Dark/light mode provider
+    │   └── ui/                    # shadcn/ui component library
+    └── lib/
+        ├── api.ts                 # Backend API client
+        ├── data.ts                # Types, mock data, utilities
+        └── dashboard-utils.ts     # Analytics computation helpers
 ```
-
-## API Testing Examples
-
-### Using curl
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# List orders (requires X-Tenant-ID header)
-curl -H "X-Tenant-ID: 550e8400-e29b-41d4-a716-446655440000" \
-     http://localhost:8000/orders
-
-# Confirm an order
-curl -X POST \
-     -H "X-Tenant-ID: 550e8400-e29b-41d4-a716-446655440000" \
-     http://localhost:8000/orders/{order_id}/confirm
-```
-
-### Using Python
-
-```python
-import httpx
-
-async with httpx.AsyncClient() as client:
-    response = await client.get(
-        "http://localhost:8000/orders",
-        headers={"X-Tenant-ID": "550e8400-e29b-41d4-a716-446655440000"}
-    )
-    print(response.json())
-```
-
-## Implementation Status
-
-✅ **Fully Implemented**
-- All API endpoints are production-ready
-- No mock routes detected - all endpoints use real service integrations
-- Comprehensive error handling and validation
-- Multi-tenant architecture with proper isolation
-- Complete AI pipeline with Claude, White Circle, and transcription services
-- Anomaly detection system
-- Database persistence with async SQLAlchemy
 
 ## License
 
-Proprietary - Anthropic Hackathon Project
+Anthropic Hackathon Project
