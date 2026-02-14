@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 
 from config import settings, validate_settings
 from database import Base, engine
-from routers import customers, interactions, orders, products, tenants
+from routers import analytics, customers, interactions, orders, products, tenants
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ app.include_router(customers.router)
 app.include_router(products.router)
 app.include_router(interactions.router)
 app.include_router(orders.router)
+app.include_router(analytics.router)
 
 
 # ---------------------------------------------------------------------------

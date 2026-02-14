@@ -163,6 +163,7 @@ class OrderRead(OrderBase):
     status: OrderStatus
     total_amount: Decimal
     created_at: datetime
+    customer_name: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +185,8 @@ class OrderItemRead(OrderItemBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    product_name: Optional[str] = None
+    product_sku: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -254,3 +257,36 @@ class InteractionUploadResponse(BaseModel):
     order_id: UUID
     status: str
     anomalies_detected: int
+
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+class OrdersByStatus(BaseModel):
+    DRAFT: int = 0
+    FLAGGED: int = 0
+    CONFIRMED: int = 0
+    SYNCED: int = 0
+
+
+class AnalyticsSummary(BaseModel):
+    total_orders: int
+    total_revenue: str
+    avg_order_value: str
+    orders_by_status: OrdersByStatus
+    error_count: int
+
+
+class TopProduct(BaseModel):
+    product_id: UUID
+    product_name: str
+    sku: str
+    total_qty: int
+    total_revenue: str
+
+
+class RevenueOverTime(BaseModel):
+    period: str
+    revenue: str
+    order_count: int

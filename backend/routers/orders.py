@@ -2,11 +2,10 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from dependencies import DBSession, TenantID
-from models import Anomaly, Order, OrderStatus
+from models import Anomaly, Order, OrderItem, OrderStatus
 from schemas import AnomalyRead, OrderDetailRead, OrderRead
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -20,9 +19,13 @@ async def list_orders(
     order_status: OrderStatus | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[Order]:
+) -> list[OrderRead]:
     """List orders scoped to the current tenant with optional filters."""
-    stmt = select(Order).where(Order.tenant_id == tenant_id)
+    stmt = (
+        select(Order)
+        .where(Order.tenant_id == tenant_id)
+        .options(joinedload(Order.customer))
+    )
 
     if customer_id is not None:
         stmt = stmt.where(Order.customer_id == customer_id)
@@ -31,7 +34,20 @@ async def list_orders(
 
     stmt = stmt.order_by(Order.created_at.desc()).offset(offset).limit(limit)
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    orders = result.scalars().unique().all()
+    return [
+        OrderRead(
+            id=o.id,
+            customer_id=o.customer_id,
+            interaction_id=o.interaction_id,
+            tenant_id=o.tenant_id,
+            status=o.status,
+            total_amount=o.total_amount,
+            created_at=o.created_at,
+            customer_name=o.customer.name if o.customer else None,
+        )
+        for o in orders
+    ]
 
 
 @router.get("/{order_id}", response_model=OrderDetailRead)
@@ -39,15 +55,16 @@ async def get_order_detail(
     order_id: uuid.UUID,
     tenant_id: TenantID,
     session: DBSession,
-) -> Order:
+) -> OrderDetailRead:
     """Return a single order with its items, anomalies, and quotes."""
     stmt = (
         select(Order)
         .where(Order.id == order_id, Order.tenant_id == tenant_id)
         .options(
-            selectinload(Order.items),
+            selectinload(Order.items).joinedload(OrderItem.product),
             selectinload(Order.anomalies),
             selectinload(Order.quotes),
+            joinedload(Order.customer),
         )
     )
     result = await session.execute(stmt)

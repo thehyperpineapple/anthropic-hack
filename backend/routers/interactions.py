@@ -56,8 +56,8 @@ async def upload_interaction(
     file: UploadFile,
     source_type: SourceType = Form(...),
     customer_id: uuid.UUID = Form(...),
-    tenant_id: TenantID,
-    session: DBSession,
+    tenant_id: TenantID = ...,  # type: ignore[assignment]
+    session: DBSession = ...,  # type: ignore[assignment]
 ) -> InteractionUploadResponse:
     """Accept a file upload, run AI pipeline, and return the created order summary."""
     try:

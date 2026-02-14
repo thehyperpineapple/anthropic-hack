@@ -204,6 +204,10 @@ class Order(TenantMixin, Base):
     quotes: Mapped[list["Quote"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     anomalies: Mapped[list["Anomaly"]] = relationship(back_populates="order", cascade="all, delete-orphan")
 
+    @property
+    def customer_name(self) -> str | None:
+        return self.customer.name if self.customer else None
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
@@ -222,6 +226,14 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship(back_populates="order_items")
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
+
+    @property
+    def product_sku(self) -> str | None:
+        return self.product.sku if self.product else None
 
 
 class Quote(Base):
