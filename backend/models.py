@@ -1,5 +1,3 @@
-import enum
-import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -7,268 +5,100 @@ from typing import Optional
 from sqlalchemy import (
     JSON,
     Boolean,
+    Computed,
+    Date,
     DateTime,
-    ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
 
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
+class Customer(Base):
+    __tablename__ = "customer_new"
 
-class SourceType(str, enum.Enum):
-    VOICE = "VOICE"
-    EMAIL = "EMAIL"
-    PDF = "PDF"
-
-
-class InteractionStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    PROCESSED = "PROCESSED"
-    FAILED = "FAILED"
-
-
-class OrderStatus(str, enum.Enum):
-    DRAFT = "DRAFT"
-    FLAGGED = "FLAGGED"
-    CONFIRMED = "CONFIRMED"
-    SYNCED = "SYNCED"
-
-
-# ---------------------------------------------------------------------------
-# Mixins
-# ---------------------------------------------------------------------------
-
-class TenantMixin:
-    """Adds a non-nullable tenant_id FK to any model that inherits it."""
-
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
-
-class Tenant(Base):
-    __tablename__ = "tenants"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    # relationships
-    users: Mapped[list["User"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-    customers: Mapped[list["Customer"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-    products: Mapped[list["Product"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-    interactions: Mapped[list["Interaction"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-    orders: Mapped[list["Order"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-
-
-class User(TenantMixin, Base):
-    __tablename__ = "users"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
-    role: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    tenant: Mapped["Tenant"] = relationship(back_populates="users")
-
-
-class Customer(TenantMixin, Base):
-    __tablename__ = "customers"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    customer_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    contact_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    tenant: Mapped["Tenant"] = relationship(back_populates="customers")
-    interactions: Mapped[list["Interaction"]] = relationship(back_populates="customer")
-    orders: Mapped[list["Order"]] = relationship(back_populates="customer")
-
-
-class Product(TenantMixin, Base):
-    __tablename__ = "products"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    sku: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    tenant: Mapped["Tenant"] = relationship(back_populates="products")
-    order_items: Mapped[list["OrderItem"]] = relationship(back_populates="product")
+    payment_terms: Mapped[str] = mapped_column(String(50), nullable=False, server_default="Net-30")
+    shipping_preference: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    customer_since: Mapped[date] = mapped_column(Date, server_default=func.current_date(), nullable=False)
+    total_lifetime_value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0.00")
+    order_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 
-class Interaction(TenantMixin, Base):
-    __tablename__ = "interactions"
+class Inventory(Base):
+    __tablename__ = "inventory_new"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
-    )
-    source_type: Mapped[SourceType] = mapped_column(nullable=False)
-    external_reference_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    raw_asset_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[InteractionStatus] = mapped_column(
-        nullable=False, default=InteractionStatus.PENDING
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    tenant: Mapped["Tenant"] = relationship(back_populates="interactions")
-    customer: Mapped["Customer"] = relationship(back_populates="interactions")
-    ai_analysis_logs: Mapped[list["AIAnalysisLog"]] = relationship(back_populates="interaction", cascade="all, delete-orphan")
-    orders: Mapped[list["Order"]] = relationship(back_populates="interaction")
-
-
-class AIAnalysisLog(Base):
-    __tablename__ = "ai_analysis_logs"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    interaction_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("interactions.id", ondelete="CASCADE"), nullable=False
-    )
-    transcript_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    raw_extraction_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 4), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    interaction: Mapped["Interaction"] = relationship(back_populates="ai_analysis_logs")
-
-
-class Order(TenantMixin, Base):
-    __tablename__ = "orders"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
-    )
-    interaction_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("interactions.id", ondelete="SET NULL"), nullable=True
-    )
-    status: Mapped[OrderStatus] = mapped_column(
-        nullable=False, default=OrderStatus.DRAFT
-    )
-    total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    tenant: Mapped["Tenant"] = relationship(back_populates="orders")
-    customer: Mapped["Customer"] = relationship(back_populates="orders")
-    interaction: Mapped[Optional["Interaction"]] = relationship(back_populates="orders")
-    items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
-    quotes: Mapped[list["Quote"]] = relationship(back_populates="order", cascade="all, delete-orphan")
-    anomalies: Mapped[list["Anomaly"]] = relationship(back_populates="order", cascade="all, delete-orphan")
-
-    @property
-    def customer_name(self) -> str | None:
-        return self.customer.name if self.customer else None
-
-
-class OrderItem(Base):
-    __tablename__ = "order_items"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    order_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
-    )
-    product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
-    )
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-
-    order: Mapped["Order"] = relationship(back_populates="items")
-    product: Mapped["Product"] = relationship(back_populates="order_items")
-
-    @property
-    def product_name(self) -> str | None:
-        return self.product.name if self.product else None
-
-    @property
-    def product_sku(self) -> str | None:
-        return self.product.sku if self.product else None
-
-
-class Quote(Base):
-    __tablename__ = "quotes"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    order_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
-    )
-    quote_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
-    valid_until: Mapped[Optional[date]] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    order: Mapped["Order"] = relationship(back_populates="quotes")
-
-
-class Anomaly(Base):
-    __tablename__ = "anomalies"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    order_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
-    )
-    rule_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    inventory_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sku: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    severity_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
-    is_resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    quantity_in_stock: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    quantity_reserved: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    quantity_available: Mapped[int] = mapped_column(
+        Integer,
+        Computed("quantity_in_stock - quantity_reserved"),
+        nullable=False,
     )
+    reorder_point: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
+    reorder_quantity: Mapped[int] = mapped_column(Integer, nullable=False, server_default="500")
+    lead_time_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="14")
+    supplier_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    cost_per_unit: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    last_restocked: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
-    order: Mapped["Order"] = relationship(back_populates="anomalies")
+
+class Order(Base):
+    __tablename__ = "orders_new"
+
+    order_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    customer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    customer_company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    order_date: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="pending")
+
+    items: Mapped[list] = mapped_column(JSON, nullable=False)
+
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    tax: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0.00")
+    shipping_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0.00")
+    discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0.00")
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+
+    estimated_delivery_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    actual_delivery_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    shipping_method: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    order_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    original_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+
+    quote_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    quote_audio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    quote_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    has_warnings: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    warnings: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    requires_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

@@ -1,292 +1,156 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
-from uuid import UUID
+from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
-from models import InteractionStatus, OrderStatus, SourceType
-
-
-# ---------------------------------------------------------------------------
-# Tenant
-# ---------------------------------------------------------------------------
-
-class TenantBase(BaseModel):
-    name: str
-
-
-class TenantCreate(TenantBase):
-    pass
-
-
-class TenantRead(TenantBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    created_at: datetime
-
-
-# ---------------------------------------------------------------------------
-# User
-# ---------------------------------------------------------------------------
-
-class UserBase(BaseModel):
-    name: str
-    email: EmailStr
-    role: str
-
-
-class UserCreate(UserBase):
-    tenant_id: UUID
-
-
-class UserRead(UserBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    tenant_id: UUID
-    created_at: datetime
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
 # Customer
 # ---------------------------------------------------------------------------
 
-class CustomerBase(BaseModel):
-    name: str
-    email: Optional[EmailStr] = None
+class CustomerRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    customer_id: int
+    company_name: str
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
+    payment_terms: str = "Net-30"
+    shipping_preference: Optional[str] = None
+    order_count: int = 0
+    total_lifetime_value: Decimal = Decimal("0.00")
 
 
-class CustomerCreate(CustomerBase):
-    tenant_id: UUID
+# ---------------------------------------------------------------------------
+# Inventory
+# ---------------------------------------------------------------------------
 
-
-class CustomerRead(CustomerBase):
+class InventoryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
-    tenant_id: UUID
-    created_at: datetime
-
-
-# ---------------------------------------------------------------------------
-# Product
-# ---------------------------------------------------------------------------
-
-class ProductBase(BaseModel):
-    name: str
+    inventory_id: int
     sku: str
-    price: Decimal = Field(ge=0)
-
-
-class ProductCreate(ProductBase):
-    tenant_id: UUID
-
-
-class ProductRead(ProductBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    tenant_id: UUID
-    created_at: datetime
+    product_name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    unit_price: Decimal
+    quantity_in_stock: int = 0
+    quantity_reserved: int = 0
+    quantity_available: int = 0
+    reorder_point: int = 100
 
 
 # ---------------------------------------------------------------------------
-# Interaction
+# Order Items (JSONB shape)
 # ---------------------------------------------------------------------------
 
-class InteractionBase(BaseModel):
-    customer_id: UUID
-    source_type: SourceType
-    external_reference_id: Optional[str] = None
-    raw_asset_url: Optional[str] = None
-
-
-class InteractionCreate(InteractionBase):
-    tenant_id: UUID
-    status: InteractionStatus = InteractionStatus.PENDING
-
-
-class InteractionRead(InteractionBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    tenant_id: UUID
-    status: InteractionStatus
-    created_at: datetime
+class OrderItemSchema(BaseModel):
+    sku: str
+    product_name: str
+    quantity: int
+    unit_price: Decimal
+    line_total: Decimal
 
 
 # ---------------------------------------------------------------------------
-# AI Analysis Log
+# Order Warning (JSONB shape)
 # ---------------------------------------------------------------------------
 
-class AIAnalysisLogBase(BaseModel):
-    interaction_id: UUID
-    transcript_text: Optional[str] = None
-    raw_extraction_json: Optional[Any] = None
-    confidence_score: Optional[Decimal] = Field(default=None, ge=0, le=1)
-
-
-class AIAnalysisLogCreate(AIAnalysisLogBase):
-    pass
-
-
-class AIAnalysisLogRead(AIAnalysisLogBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    created_at: datetime
+class OrderWarning(BaseModel):
+    type: str
+    message: str
+    severity: str = "medium"
 
 
 # ---------------------------------------------------------------------------
 # Order
 # ---------------------------------------------------------------------------
 
-class OrderBase(BaseModel):
-    customer_id: UUID
-    interaction_id: Optional[UUID] = None
-
-
-class OrderCreate(OrderBase):
-    tenant_id: UUID
-    status: OrderStatus = OrderStatus.DRAFT
-    total_amount: Decimal = Decimal("0")
-
-
-class OrderRead(OrderBase):
+class OrderRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
-    tenant_id: UUID
-    status: OrderStatus
+    order_id: int
+    order_number: str
+    customer_id: Optional[int] = None
+    customer_company_name: str
+    order_date: datetime
+    status: str
+    items: list[dict]
+    subtotal: Decimal
+    tax: Decimal = Decimal("0.00")
+    shipping_cost: Decimal = Decimal("0.00")
+    discount: Decimal = Decimal("0.00")
     total_amount: Decimal
+    order_source: Optional[str] = None
+    ai_confidence_score: Optional[Decimal] = None
+    has_warnings: bool = False
     created_at: datetime
     customer_name: Optional[str] = None
 
 
-# ---------------------------------------------------------------------------
-# Order Item
-# ---------------------------------------------------------------------------
-
-class OrderItemBase(BaseModel):
-    order_id: UUID
-    product_id: UUID
-    quantity: int = Field(gt=0)
-    unit_price: Decimal = Field(ge=0)
-
-
-class OrderItemCreate(OrderItemBase):
-    pass
-
-
-class OrderItemRead(OrderItemBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    product_name: Optional[str] = None
-    product_sku: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# Quote
-# ---------------------------------------------------------------------------
-
-class QuoteBase(BaseModel):
-    order_id: UUID
-    quote_amount: Decimal = Field(ge=0)
-    valid_until: Optional[date] = None
-
-
-class QuoteCreate(QuoteBase):
-    pass
-
-
-class QuoteRead(QuoteBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    created_at: datetime
-
-
-# ---------------------------------------------------------------------------
-# Anomaly
-# ---------------------------------------------------------------------------
-
-class AnomalyBase(BaseModel):
-    order_id: UUID
-    rule_code: str
-    description: Optional[str] = None
-    severity_score: Optional[Decimal] = Field(default=None, ge=0)
-
-
-class AnomalyCreate(AnomalyBase):
-    is_resolved: bool = False
-
-
-class AnomalyRead(AnomalyBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    is_resolved: bool
-    created_at: datetime
-
-
-# ---------------------------------------------------------------------------
-# Composite / Response schemas
-# ---------------------------------------------------------------------------
-
 class OrderDetailRead(OrderRead):
-    """Full order view returned by GET /orders/{id}."""
-
-    items: list[OrderItemRead] = []
-    anomalies: list[AnomalyRead] = []
-    quotes: list[QuoteRead] = []
-
-
-class InteractionTextRequest(BaseModel):
-    """Accept pre-transcribed text (transcription done on frontend)."""
-    transcript: str
-    source_type: SourceType
-    customer_id: UUID
+    original_message: Optional[str] = None
+    quote_text: Optional[str] = None
+    quote_audio_url: Optional[str] = None
+    warnings: Optional[list[dict]] = None
+    estimated_delivery_date: Optional[date] = None
+    shipping_method: Optional[str] = None
+    requires_human_review: bool = False
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
 
-class InteractionUploadResponse(BaseModel):
-    interaction_id: UUID
-    order_id: UUID
+# ---------------------------------------------------------------------------
+# Process Order Request / Response
+# ---------------------------------------------------------------------------
+
+class ProcessOrderRequest(BaseModel):
+    customer_id: int
+    source_type: str = Field(pattern=r"^(voice_message|text_file)$")
+    original_message: str = Field(min_length=1)
+
+
+class ProcessOrderResponse(BaseModel):
+    order_id: int
+    order_number: str
+    customer_company_name: str
     status: str
-    anomalies_detected: int
+    items: list[dict]
+    subtotal: Decimal
+    tax: Decimal = Decimal("0.00")
+    total_amount: Decimal
+    has_warnings: bool = False
+    warnings: list[dict] = []
+    requires_human_review: bool = False
+    ai_confidence_score: Optional[Decimal] = None
+    order_date: datetime
+
+
+# ---------------------------------------------------------------------------
+# Update Order Status
+# ---------------------------------------------------------------------------
+
+class UpdateOrderStatusRequest(BaseModel):
+    status: str = Field(pattern=r"^(pending|processing|completed|review_needed|error|cancelled)$")
+    reviewed_by: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
 
-class OrdersByStatus(BaseModel):
-    DRAFT: int = 0
-    FLAGGED: int = 0
-    CONFIRMED: int = 0
-    SYNCED: int = 0
-
-
 class AnalyticsSummary(BaseModel):
     total_orders: int
-    total_revenue: str
-    avg_order_value: str
-    orders_by_status: OrdersByStatus
+    total_revenue: Decimal
+    avg_order_value: Decimal
+    orders_by_status: dict[str, int]
     error_count: int
 
 
 class TopProduct(BaseModel):
-    product_id: UUID
-    product_name: str
     sku: str
+    product_name: str
     total_qty: int
-    total_revenue: str
-
-
-class RevenueOverTime(BaseModel):
-    period: str
-    revenue: str
-    order_count: int
+    total_revenue: Decimal

@@ -1,73 +1,55 @@
-import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload, selectinload
 
-from dependencies import DBSession, TenantID
-from models import Anomaly, Order, OrderItem, OrderStatus
-from schemas import AnomalyRead, OrderDetailRead, OrderRead
+from dependencies import DBSession
+from models import Order
+from schemas import (
+    OrderDetailRead,
+    OrderRead,
+    ProcessOrderRequest,
+    ProcessOrderResponse,
+    UpdateOrderStatusRequest,
+)
+from services.order_processor import OrderProcessor
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+processor = OrderProcessor()
 
 
 @router.get("", response_model=list[OrderRead])
 async def list_orders(
-    tenant_id: TenantID,
     session: DBSession,
-    customer_id: uuid.UUID | None = None,
-    order_status: OrderStatus | None = None,
+    customer_id: int | None = None,
+    status_filter: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[OrderRead]:
-    """List orders scoped to the current tenant with optional filters."""
-    stmt = (
-        select(Order)
-        .where(Order.tenant_id == tenant_id)
-        .options(joinedload(Order.customer))
-    )
+) -> list[Order]:
+    """List orders with optional filters."""
+    stmt = select(Order)
 
     if customer_id is not None:
         stmt = stmt.where(Order.customer_id == customer_id)
-    if order_status is not None:
-        stmt = stmt.where(Order.status == order_status)
+    if status_filter is not None:
+        stmt = stmt.where(Order.status == status_filter)
 
-    stmt = stmt.order_by(Order.created_at.desc()).offset(offset).limit(limit)
+    stmt = stmt.order_by(Order.order_date.desc()).offset(offset).limit(limit)
     result = await session.execute(stmt)
     orders = result.scalars().unique().all()
-    return [
-        OrderRead(
-            id=o.id,
-            customer_id=o.customer_id,
-            interaction_id=o.interaction_id,
-            tenant_id=o.tenant_id,
-            status=o.status,
-            total_amount=o.total_amount,
-            created_at=o.created_at,
-            customer_name=o.customer.name if o.customer else None,
-        )
-        for o in orders
-    ]
+    return list(orders)
 
 
 @router.get("/{order_id}", response_model=OrderDetailRead)
 async def get_order_detail(
-    order_id: uuid.UUID,
-    tenant_id: TenantID,
+    order_id: int,
     session: DBSession,
-) -> OrderDetailRead:
-    """Return a single order with its items, anomalies, and quotes."""
-    stmt = (
-        select(Order)
-        .where(Order.id == order_id, Order.tenant_id == tenant_id)
-        .options(
-            selectinload(Order.items).joinedload(OrderItem.product),
-            selectinload(Order.anomalies),
-            selectinload(Order.quotes),
-            joinedload(Order.customer),
-        )
+) -> Order:
+    """Return a single order with full details."""
+    result = await session.execute(
+        select(Order).where(Order.order_id == order_id)
     )
-    result = await session.execute(stmt)
     order = result.scalar_one_or_none()
 
     if order is None:
@@ -78,23 +60,42 @@ async def get_order_detail(
     return order
 
 
-@router.post("/{order_id}/confirm", response_model=OrderDetailRead)
-async def confirm_order(
-    order_id: uuid.UUID,
-    tenant_id: TenantID,
+@router.post("/process", response_model=ProcessOrderResponse, status_code=201)
+async def process_order(
+    body: ProcessOrderRequest,
+    session: DBSession,
+) -> dict:
+    """Send a transcript to be parsed by Claude and create an order."""
+    try:
+        result = await processor.process_order(
+            customer_id=body.customer_id,
+            source_type=body.source_type,
+            original_message=body.original_message,
+            session=session,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Order processing failed: {str(e)}",
+        )
+
+
+@router.patch("/{order_id}/status", response_model=OrderDetailRead)
+async def update_order_status(
+    order_id: int,
+    body: UpdateOrderStatusRequest,
     session: DBSession,
 ) -> Order:
-    """Manually approve a DRAFT or FLAGGED order -> CONFIRMED."""
-    stmt = (
-        select(Order)
-        .where(Order.id == order_id, Order.tenant_id == tenant_id)
-        .options(
-            selectinload(Order.items),
-            selectinload(Order.anomalies),
-            selectinload(Order.quotes),
-        )
+    """Update an order's status (e.g. confirm, complete, cancel)."""
+    result = await session.execute(
+        select(Order).where(Order.order_id == order_id)
     )
-    result = await session.execute(stmt)
     order = result.scalar_one_or_none()
 
     if order is None:
@@ -103,63 +104,13 @@ async def confirm_order(
             detail="Order not found",
         )
 
-    if order.status not in (OrderStatus.DRAFT, OrderStatus.FLAGGED):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot confirm order in '{order.status.value}' status",
-        )
+    order.status = body.status
+    if body.reviewed_by:
+        order.reviewed_by = body.reviewed_by
+        order.reviewed_at = datetime.now()
+    order.updated_at = datetime.now()
 
-    order.status = OrderStatus.CONFIRMED
     await session.commit()
     await session.refresh(order)
 
     return order
-
-
-@router.post(
-    "/{order_id}/anomalies/{anomaly_id}/resolve",
-    response_model=AnomalyRead,
-)
-async def resolve_anomaly(
-    order_id: uuid.UUID,
-    anomaly_id: uuid.UUID,
-    tenant_id: TenantID,
-    session: DBSession,
-) -> Anomaly:
-    """Mark an anomaly as resolved. If all anomalies on a FLAGGED order are resolved, transition to DRAFT."""
-    # Verify order belongs to tenant
-    order_stmt = select(Order).where(Order.id == order_id, Order.tenant_id == tenant_id)
-    order_result = await session.execute(order_stmt)
-    order = order_result.scalar_one_or_none()
-    if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-
-    # Find the anomaly
-    anomaly_stmt = select(Anomaly).where(
-        Anomaly.id == anomaly_id, Anomaly.order_id == order_id
-    )
-    anomaly_result = await session.execute(anomaly_stmt)
-    anomaly = anomaly_result.scalar_one_or_none()
-    if anomaly is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Anomaly not found")
-
-    if anomaly.is_resolved:
-        return anomaly
-
-    anomaly.is_resolved = True
-
-    # Check if all anomalies on this order are now resolved
-    unresolved_stmt = select(Anomaly).where(
-        Anomaly.order_id == order_id,
-        Anomaly.is_resolved == False,  # noqa: E712
-        Anomaly.id != anomaly_id,
-    )
-    unresolved_result = await session.execute(unresolved_stmt)
-    remaining = unresolved_result.scalars().all()
-
-    if not remaining and order.status == OrderStatus.FLAGGED:
-        order.status = OrderStatus.DRAFT
-
-    await session.commit()
-    await session.refresh(anomaly)
-    return anomaly

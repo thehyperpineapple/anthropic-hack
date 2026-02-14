@@ -22,20 +22,20 @@ class Settings(BaseSettings):
     SAFETY_MODE: str = "log"
     LOG_LEVEL: str = "INFO"
 
+    # Blaxel
+    BL_WORKSPACE: str = ""
+    BL_API_KEY: str = ""
+    BL_AGENT_NAME: str = "order-processor"
+
 
 settings = Settings()
 
 
 def validate_settings() -> None:
-    """Run startup validation checks.
-
-    Call once at app init (e.g. from main.py).
-    Hard-fails on missing critical config; warns on optional gaps.
-    """
+    """Run startup validation checks."""
     errors: list[str] = []
     warnings: list[str] = []
 
-    # --- Hard failures ---
     if not settings.ANTHROPIC_API_KEY:
         errors.append(
             "[OrderFlow] FATAL: ANTHROPIC_API_KEY is not set.\n"
@@ -48,7 +48,6 @@ def validate_settings() -> None:
             "  Set it in your .env file or environment before starting the server."
         )
 
-    # --- Warnings ---
     if not settings.ELEVENLABS_API_KEY and not settings.OPENAI_API_KEY:
         warnings.append(
             "[OrderFlow] WARNING: Neither ELEVENLABS_API_KEY nor OPENAI_API_KEY is set.\n"
@@ -68,7 +67,5 @@ def validate_settings() -> None:
     if errors:
         for e in errors:
             logger.critical(e)
-        # Also print to stderr so the message is visible even if logging isn't
-        # configured yet (e.g. bare `python -c "from config import ..."`)
         print("\n".join(errors), file=sys.stderr)
         sys.exit(1)

@@ -1,158 +1,75 @@
-import uuid
+from collections import defaultdict
 from decimal import Decimal
-from enum import Enum
 
-from fastapi import APIRouter, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter
+from sqlalchemy import select
 
-from dependencies import DBSession, TenantID
-from models import Order, OrderItem, OrderStatus, Product
-from schemas import AnalyticsSummary, OrdersByStatus, RevenueOverTime, TopProduct
+from dependencies import DBSession
+from models import Order
+from schemas import AnalyticsSummary, TopProduct
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-# ---------------------------------------------------------------------------
-# GET /analytics/summary
-# ---------------------------------------------------------------------------
-
 @router.get("/summary", response_model=AnalyticsSummary)
 async def get_summary(
-    tenant_id: TenantID,
     session: DBSession,
-    customer_id: uuid.UUID | None = None,
-) -> AnalyticsSummary:
-    """Aggregated dashboard stats, optionally filtered by customer."""
-    filters = [Order.tenant_id == tenant_id]
+    customer_id: int | None = None,
+) -> dict:
+    """Aggregated stats for dashboard cards. Pass customer_id for client view."""
+    stmt = select(Order)
     if customer_id is not None:
-        filters.append(Order.customer_id == customer_id)
-
-    stmt = select(
-        func.count().label("total_orders"),
-        func.coalesce(func.sum(Order.total_amount), 0).label("total_revenue"),
-        func.coalesce(func.avg(Order.total_amount), 0).label("avg_order_value"),
-        func.count().filter(Order.status == OrderStatus.DRAFT).label("draft_count"),
-        func.count().filter(Order.status == OrderStatus.FLAGGED).label("flagged_count"),
-        func.count().filter(Order.status == OrderStatus.CONFIRMED).label("confirmed_count"),
-        func.count().filter(Order.status == OrderStatus.SYNCED).label("synced_count"),
-    ).where(*filters)
+        stmt = stmt.where(Order.customer_id == customer_id)
 
     result = await session.execute(stmt)
-    row = result.one()
+    orders = list(result.scalars().all())
 
-    return AnalyticsSummary(
-        total_orders=row.total_orders,
-        total_revenue=f"{Decimal(row.total_revenue):.2f}",
-        avg_order_value=f"{Decimal(row.avg_order_value):.2f}",
-        orders_by_status=OrdersByStatus(
-            DRAFT=row.draft_count,
-            FLAGGED=row.flagged_count,
-            CONFIRMED=row.confirmed_count,
-            SYNCED=row.synced_count,
-        ),
-        error_count=row.flagged_count,
-    )
+    total_orders = len(orders)
+    total_revenue = sum(o.total_amount for o in orders)
+    avg_order_value = total_revenue / total_orders if total_orders > 0 else Decimal("0")
 
+    status_counts: dict[str, int] = defaultdict(int)
+    error_count = 0
+    for o in orders:
+        status_counts[o.status] += 1
+        if o.status == "error":
+            error_count += 1
 
-# ---------------------------------------------------------------------------
-# GET /analytics/top-products
-# ---------------------------------------------------------------------------
+    return {
+        "total_orders": total_orders,
+        "total_revenue": total_revenue,
+        "avg_order_value": avg_order_value,
+        "orders_by_status": dict(status_counts),
+        "error_count": error_count,
+    }
+
 
 @router.get("/top-products", response_model=list[TopProduct])
 async def get_top_products(
-    tenant_id: TenantID,
     session: DBSession,
-    limit: int = Query(default=8, ge=1, le=100),
-) -> list[TopProduct]:
-    """Most popular products by quantity sold (CONFIRMED/SYNCED orders only)."""
-    stmt = (
-        select(
-            Product.id.label("product_id"),
-            Product.name.label("product_name"),
-            Product.sku.label("sku"),
-            func.sum(OrderItem.quantity).label("total_qty"),
-            func.sum(OrderItem.quantity * OrderItem.unit_price).label("total_revenue"),
-        )
-        .join(OrderItem, OrderItem.product_id == Product.id)
-        .join(Order, Order.id == OrderItem.order_id)
-        .where(
-            Order.tenant_id == tenant_id,
-            Order.status.in_([OrderStatus.CONFIRMED, OrderStatus.SYNCED]),
-        )
-        .group_by(Product.id, Product.name, Product.sku)
-        .order_by(func.sum(OrderItem.quantity).desc())
-        .limit(limit)
+    limit: int = 8,
+) -> list[dict]:
+    """Aggregate product demand across all orders' JSONB items."""
+    result = await session.execute(select(Order))
+    orders = list(result.scalars().all())
+
+    product_map: dict[str, dict] = {}
+    for order in orders:
+        if not order.items:
+            continue
+        for item in order.items:
+            sku = item.get("sku", "UNKNOWN")
+            if sku not in product_map:
+                product_map[sku] = {
+                    "sku": sku,
+                    "product_name": item.get("product_name", sku),
+                    "total_qty": 0,
+                    "total_revenue": Decimal("0"),
+                }
+            product_map[sku]["total_qty"] += item.get("quantity", 0)
+            product_map[sku]["total_revenue"] += Decimal(str(item.get("line_total", 0)))
+
+    sorted_products = sorted(
+        product_map.values(), key=lambda x: x["total_qty"], reverse=True
     )
-
-    result = await session.execute(stmt)
-    rows = result.all()
-
-    return [
-        TopProduct(
-            product_id=r.product_id,
-            product_name=r.product_name,
-            sku=r.sku,
-            total_qty=int(r.total_qty),
-            total_revenue=f"{Decimal(r.total_revenue):.2f}",
-        )
-        for r in rows
-    ]
-
-
-# ---------------------------------------------------------------------------
-# GET /analytics/revenue-over-time
-# ---------------------------------------------------------------------------
-
-class Granularity(str, Enum):
-    day = "day"
-    week = "week"
-    month = "month"
-
-
-@router.get("/revenue-over-time", response_model=list[RevenueOverTime])
-async def get_revenue_over_time(
-    tenant_id: TenantID,
-    session: DBSession,
-    customer_id: uuid.UUID | None = None,
-    granularity: Granularity = Granularity.month,
-) -> list[RevenueOverTime]:
-    """Revenue trend grouped by day, week, or month (CONFIRMED/SYNCED only)."""
-    if granularity == Granularity.day:
-        period_expr = func.date(Order.created_at)
-        fmt = lambda d: str(d)  # noqa: E731
-    elif granularity == Granularity.week:
-        period_expr = func.date_trunc("week", Order.created_at)
-        fmt = lambda d: str(d.date()) if hasattr(d, "date") else str(d)  # noqa: E731
-    else:  # month
-        period_expr = func.date_trunc("month", Order.created_at)
-        fmt = lambda d: d.strftime("%Y-%m") if hasattr(d, "strftime") else str(d)[:7]  # noqa: E731
-
-    filters = [
-        Order.tenant_id == tenant_id,
-        Order.status.in_([OrderStatus.CONFIRMED, OrderStatus.SYNCED]),
-    ]
-    if customer_id is not None:
-        filters.append(Order.customer_id == customer_id)
-
-    stmt = (
-        select(
-            period_expr.label("period"),
-            func.coalesce(func.sum(Order.total_amount), 0).label("revenue"),
-            func.count().label("order_count"),
-        )
-        .where(*filters)
-        .group_by(period_expr)
-        .order_by(period_expr.asc())
-    )
-
-    result = await session.execute(stmt)
-    rows = result.all()
-
-    return [
-        RevenueOverTime(
-            period=fmt(r.period),
-            revenue=f"{Decimal(r.revenue):.2f}",
-            order_count=r.order_count,
-        )
-        for r in rows
-    ]
+    return sorted_products[:limit]
