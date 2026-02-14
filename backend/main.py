@@ -3,12 +3,15 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from config import settings, validate_settings
 from routers import interactions, orders
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
+
+validate_settings()
 
 app = FastAPI(
     title="OrderFlow AI",
