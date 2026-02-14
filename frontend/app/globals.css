@@ -42,6 +42,45 @@
     --sidebar-border: 0 10% 90%;
     --sidebar-ring: 0 68% 71%;
   }
+
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 93%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 93%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 0 68% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 30% 15%;
+    --secondary-foreground: 0 60% 80%;
+    --muted: 0 10% 16%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 340 58% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 150 50% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 43 80% 50%;
+    --warning-foreground: 43 90% 90%;
+    --border: 0 5% 20%;
+    --input: 0 5% 20%;
+    --ring: 0 68% 65%;
+    --chart-1: 0 68% 65%;
+    --chart-2: 340 58% 55%;
+    --chart-3: 150 50% 40%;
+    --chart-4: 43 80% 50%;
+    --chart-5: 0 30% 15%;
+    --sidebar-background: 0 0% 7%;
+    --sidebar-foreground: 0 0% 93%;
+    --sidebar-primary: 0 68% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 30% 15%;
+    --sidebar-accent-foreground: 0 0% 93%;
+    --sidebar-border: 0 5% 20%;
+    --sidebar-ring: 0 68% 65%;
+  }
 }
 
 @layer base {
@@ -94,4 +133,8 @@
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .glass {
+  background: rgba(18, 18, 18, 0.8);
 }

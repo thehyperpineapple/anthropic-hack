@@ -177,6 +177,14 @@ export default function DashboardPage() {
           <OrderDetailPanel
             order={selectedOrder}
             onClose={() => setSelectedOrder(null)}
+            onOrderUpdate={async () => {
+              try {
+                const ordersData = await fetchOrders()
+                setAllOrders(ordersData)
+              } catch (err) {
+                console.error("Failed to refresh orders:", err)
+              }
+            }}
           />
         )}
       </AnimatePresence>

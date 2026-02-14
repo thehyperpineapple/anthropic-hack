@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion } from "framer-motion"
-import { Bell, Heart, Upload, LayoutDashboard, Settings, FileText } from "lucide-react"
+import { Bell, Heart, Upload, LayoutDashboard, Settings, FileText, Sun, Moon } from "lucide-react"
+import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname()
+  const { theme, setTheme } = useTheme()
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-border/50">
@@ -67,6 +69,14 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+            aria-label="Toggle theme"
+          >
+            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute left-2 top-2 h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          </button>
           <button
             className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
             aria-label="Notifications"

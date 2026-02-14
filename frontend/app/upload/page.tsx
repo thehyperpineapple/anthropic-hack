@@ -36,7 +36,6 @@ type ProcessingStep = {
 export default function UploadPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
-
   const [clients, setClients] = useState<Client[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState("")
   const [orderResult, setOrderResult] = useState<{ order_number: string; total_amount: string | number } | null>(null)
@@ -47,16 +46,16 @@ export default function UploadPage() {
       if (data.length > 0) setSelectedCustomer(data[0].name)
     }).catch(console.error)
   }, [])
+  const [textInput, setTextInput] = useState("")
   const [textFile, setTextFile] = useState<File | null>(null)
+  const [dragOverText, setDragOverText] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([])
-  const [dragOverText, setDragOverText] = useState(false)
   const [transcribedText, setTranscribedText] = useState("")
   const [liveTranscript, setLiveTranscript] = useState("")
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
-  const [audioChunks, setAudioChunks] = useState<Blob[]>([])
   const [recordedAudioBlob, setRecordedAudioBlob] = useState<Blob | null>(null)
 
   // ElevenLabs Scribe setup
@@ -69,13 +68,6 @@ export default function UploadPage() {
       setTranscribedText((prev) => prev + " " + data.text)
     },
   })
-
-  const handleTextDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOverText(false)
-    const file = e.dataTransfer.files[0]
-    if (file) setTextFile(file)
-  }, [])
 
   const sendToBackend = useCallback(async (message: string, sourceType: "voice_message" | "text_file") => {
     const customer = clients.find((c) => c.name === selectedCustomer)
@@ -157,7 +149,6 @@ export default function UploadPage() {
         
         recorder.start()
         setMediaRecorder(recorder)
-        setAudioChunks(chunks)
 
         // Fetch token from your server for transcription
         const response = await fetch("/api/scribe-token")
@@ -199,10 +190,20 @@ export default function UploadPage() {
     await sendToBackend(transcribedText.trim(), "voice_message")
   }
 
+  const handleTextDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverText(false)
+    const file = e.dataTransfer.files[0]
+    if (file) setTextFile(file)
+  }, [])
+
   const handleProcessText = async () => {
-    if (!textFile) return
-    const fileContent = await textFile.text()
-    await sendToBackend(fileContent, "text_file")
+    let content = textInput.trim()
+    if (!content && textFile) {
+      content = await textFile.text()
+    }
+    if (!content) return
+    await sendToBackend(content, "text_file")
   }
 
   return (
@@ -249,9 +250,9 @@ export default function UploadPage() {
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100"
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40"
                       >
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                       </motion.div>
                     ) : (
                       <div className="flex h-6 w-6 items-center justify-center">
@@ -322,13 +323,14 @@ export default function UploadPage() {
                   variant="outline"
                   onClick={() => {
                     setShowSuccess(false)
+                    setTextInput("")
                     setTextFile(null)
                     setTranscribedText("")
                     setLiveTranscript("")
                     setRecordedAudioBlob(null)
                     setOrderResult(null)
                   }}
-                  className="flex-1 border-coral-200 text-coral-400 hover:bg-coral-50 hover:text-coral-500"
+                  className="flex-1 border-coral-200 dark:border-coral-800 text-coral-400 hover:bg-coral-50 dark:hover:bg-coral-950/30 hover:text-coral-500"
                 >
                   Upload Another
                 </Button>
@@ -404,10 +406,7 @@ export default function UploadPage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="group relative overflow-hidden rounded-2xl border bg-card p-1"
-            style={{
-              borderImage: "linear-gradient(135deg, #FF6B6B, #FFE5E5) 1",
-            }}
+            className="group relative overflow-hidden rounded-2xl border border-coral-200 dark:border-coral-800/50 bg-card p-1"
           >
             <div className="rounded-xl bg-card p-6">
               <div className="mb-6 flex items-center gap-3">
@@ -419,12 +418,28 @@ export default function UploadPage() {
                     Text Orders
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    .txt, .pdf, .docx, .csv
+                    Type, paste, or upload a file
                   </p>
                 </div>
                 <Sparkles className="ml-auto h-5 w-5 text-coral-300" />
               </div>
 
+              <textarea
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder="e.g. I need 50 units of Organic Honey and 30 jars of Almond Butter..."
+                className="mb-4 w-full resize-none rounded-xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-coral-400 focus:outline-none focus:ring-2 focus:ring-coral-400/20 transition-all"
+                rows={4}
+              />
+
+              {/* Divider */}
+              <div className="mb-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-medium text-muted-foreground">or attach a file</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* File Upload Area */}
               <div
                 onDrop={handleTextDrop}
                 onDragOver={(e) => {
@@ -433,7 +448,7 @@ export default function UploadPage() {
                 }}
                 onDragLeave={() => setDragOverText(false)}
                 onClick={() => fileInputRef.current?.click()}
-                className={`mb-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed py-12 transition-all ${
+                className={`mb-6 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed py-6 transition-all ${
                   dragOverText
                     ? "border-coral-400 bg-coral-400/5"
                     : "border-border hover:border-coral-300 hover:bg-muted/50"
@@ -464,9 +479,9 @@ export default function UploadPage() {
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ type: "spring", bounce: 0.5 }}
-                        className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100"
+                        className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30"
                       >
-                        <Check className="h-6 w-6 text-emerald-600" />
+                        <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       </motion.div>
                       <p className="text-sm font-medium text-foreground">
                         {textFile.name}
@@ -483,12 +498,12 @@ export default function UploadPage() {
                       exit={{ opacity: 0 }}
                       className="flex flex-col items-center"
                     >
-                      <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-                      <p className="text-sm font-medium text-foreground">
-                        Drop your order files here
+                      <Upload className="mb-2 h-6 w-6 text-muted-foreground" />
+                      <p className="text-xs font-medium text-foreground">
+                        Drop files here or click to browse
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        or click to browse
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        .txt, .pdf, .docx, .csv
                       </p>
                     </motion.div>
                   )}
@@ -497,7 +512,7 @@ export default function UploadPage() {
 
               <Button
                 onClick={handleProcessText}
-                disabled={!textFile || processing}
+                disabled={(!textInput.trim() && !textFile) || processing}
                 className="w-full bg-gradient-to-r from-coral-400 to-coral-500 text-card hover:from-coral-500 hover:to-coral-600 border-0 shadow-lg shadow-coral-400/25 transition-all hover:shadow-xl hover:shadow-coral-400/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
               >
                 Process Order
@@ -511,11 +526,7 @@ export default function UploadPage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="group relative overflow-hidden rounded-2xl border bg-card p-1"
-            style={{
-              borderImage:
-                "linear-gradient(135deg, #FFE5E5, #C73866) 1",
-            }}
+            className="group relative overflow-hidden rounded-2xl border border-rose-200 dark:border-rose-800/50 bg-card p-1"
           >
             <div className="rounded-xl bg-card p-6">
               <div className="mb-6 flex items-center gap-3">
@@ -539,7 +550,7 @@ export default function UploadPage() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mb-4 rounded-xl border border-rose-200 bg-rose-50/50 p-4"
+                  className="mb-4 rounded-xl border border-rose-200 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/30 p-4"
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <div className="flex items-center gap-2">
@@ -571,7 +582,7 @@ export default function UploadPage() {
                 disabled={scribe.isConnected && !isRecording}
                 className={`mb-4 flex w-full items-center justify-center gap-3 rounded-xl border-2 py-4 transition-all ${
                   isRecording
-                    ? "border-red-300 bg-red-50"
+                    ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
                     : "border-border hover:border-rose-300"
                 }`}
               >
@@ -604,7 +615,7 @@ export default function UploadPage() {
                       setRecordedAudioBlob(null)
                     }}
                     variant="outline"
-                    className="w-full mb-4 border-rose-200 text-rose-400 hover:bg-rose-50 hover:text-rose-500"
+                    className="w-full mb-4 border-rose-200 dark:border-rose-800 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500"
                   >
                     Clear & Record Again
                   </Button>

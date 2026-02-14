@@ -22,6 +22,7 @@ import {
 import { useState } from "react"
 import type { Order } from "@/lib/data"
 import { formatCurrency } from "@/lib/data"
+import { updateOrderStatus } from "@/lib/api"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,12 +35,31 @@ import {
 interface OrderDetailPanelProps {
   order: Order
   onClose: () => void
+  onOrderUpdate?: () => void
 }
 
-export function OrderDetailPanel({ order, onClose }: OrderDetailPanelProps) {
+export function OrderDetailPanel({ order, onClose, onOrderUpdate }: OrderDetailPanelProps) {
   const [copied, setCopied] = useState(false)
   const [quoteView, setQuoteView] = useState<"text" | "voice">("text")
   const [isPlaying, setIsPlaying] = useState(false)
+  const [actionLoading, setActionLoading] = useState<"approve" | "reject" | null>(null)
+
+  const canReview = order.status === "processing" || order.status === "review"
+
+  const handleStatusAction = async (action: "approve" | "reject") => {
+    if (!order.orderId) return
+    setActionLoading(action)
+    try {
+      const newStatus = action === "approve" ? "completed" : "cancelled"
+      await updateOrderStatus(order.orderId, newStatus, "Employee")
+      onOrderUpdate?.()
+      onClose()
+    } catch (err) {
+      alert(`Failed to ${action} order: ${err instanceof Error ? err.message : "Unknown error"}`)
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   const handleCopy = () => {
     setCopied(true)
@@ -119,11 +139,60 @@ OrderFlow AI`
             <Send className="mr-1.5 h-3.5 w-3.5" />
             Send Quote
           </Button>
-          <Button variant="outline" size="sm" className="text-xs border-border text-foreground hover:bg-muted">
-            <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
-            Mark Complete
-          </Button>
+          {!canReview && (
+            <Button variant="outline" size="sm" className="text-xs border-border text-foreground hover:bg-muted">
+              <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+              Mark Complete
+            </Button>
+          )}
         </div>
+
+        {/* Approve / Reject Banner */}
+        {canReview && (
+          <div className="flex items-center gap-3 border-b border-border bg-amber-50/70 dark:bg-amber-950/20 px-6 py-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <span className="flex-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+              This order requires review
+            </span>
+            <Button
+              size="sm"
+              onClick={() => handleStatusAction("approve")}
+              disabled={actionLoading !== null}
+              className="h-8 bg-emerald-600 text-white hover:bg-emerald-700 border-0 text-xs px-4"
+            >
+              {actionLoading === "approve" ? (
+                <span className="flex items-center gap-1.5">
+                  <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} className="inline-block h-3 w-3 rounded-full border-2 border-white border-t-transparent" />
+                  Approving...
+                </span>
+              ) : (
+                <>
+                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                  Approve
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleStatusAction("reject")}
+              disabled={actionLoading !== null}
+              className="h-8 border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs px-4"
+            >
+              {actionLoading === "reject" ? (
+                <span className="flex items-center gap-1.5">
+                  <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }} className="inline-block h-3 w-3 rounded-full border-2 border-red-500 border-t-transparent" />
+                  Rejecting...
+                </span>
+              ) : (
+                <>
+                  <X className="mr-1.5 h-3.5 w-3.5" />
+                  Reject
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto">
@@ -413,20 +482,20 @@ OrderFlow AI`
               {order.warning && (
                 <AccordionItem
                   value="warning"
-                  className="rounded-lg border border-amber-200 bg-amber-50/50 px-4"
+                  className="rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30 px-4"
                 >
                   <AccordionTrigger className="py-3 text-sm hover:no-underline">
                     <span className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      <span className="text-amber-700">
+                      <span className="text-amber-700 dark:text-amber-400">
                         Unusually large order ({order.warning})
                       </span>
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                      <span className="rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
                         Needs Review
                       </span>
                     </span>
                   </AccordionTrigger>
-                  <AccordionContent className="pb-3 text-xs text-amber-600">
+                  <AccordionContent className="pb-3 text-xs text-amber-600 dark:text-amber-400">
                     This order is significantly larger than the customer average.
                     Please verify with the customer before processing.
                   </AccordionContent>
